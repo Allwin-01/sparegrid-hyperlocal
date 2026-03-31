@@ -1,0 +1,9 @@
+{
+  "name": "Spare Grid",
+  "description": "Real-time automotive inventory network for Coimbatore, Tiruppur, Erode, and Salem. Connecting garages to local shops instantly.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation",
+    "microphone"
+  ]
+}
