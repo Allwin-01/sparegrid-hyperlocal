@@ -3,6 +3,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ArrowUp, Paperclip, Square, X, StopCircle, Mic, Globe, BrainCog, FolderCode, HardDrive, Camera } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toaster } from "./basic-toast";
 
 // Utility function for className merging
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ");
@@ -418,10 +419,9 @@ const PromptInputAction: React.FC<PromptInputActionProps> = ({
   side = "top",
   ...props
 }) => {
-  const { disabled } = usePromptInput();
   return (
     <Tooltip {...props}>
-      <TooltipTrigger asChild disabled={disabled}>
+      <TooltipTrigger asChild>
         {children}
       </TooltipTrigger>
       <TooltipContent side={side} className={className}>
@@ -452,6 +452,7 @@ interface PromptInputBoxProps {
   onCameraClick?: () => void;
   onDriveClick?: () => void;
   user?: any;
+  isAuthLoading?: boolean;
   onShowLogin?: () => void;
 }
 export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref: React.Ref<HTMLDivElement>) => {
@@ -463,6 +464,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
     onCameraClick,
     onDriveClick,
     user,
+    isAuthLoading = false,
     onShowLogin
   } = props;
   const [input, setInput] = React.useState("");
@@ -702,11 +704,21 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
           >
             <PromptInputAction tooltip="Camera">
               <button
-                onClick={() => {
-                  if (!user) onShowLogin?.();
-                  else onCameraClick?.();
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (isRecording) return;
+                  console.log("PromptInputBox: Camera clicked, user:", user, "isAuthLoading:", isAuthLoading);
+                  if (!user) {
+                    console.log("PromptInputBox: Camera clicked, no user, calling onShowLogin");
+                    toaster.create({ title: "Authentication Required", description: "Please sign in to use the camera" });
+                    onShowLogin?.();
+                  } else {
+                    onCameraClick?.();
+                  }
                 }}
-                className="flex h-8 w-8 text-[#9CA3AF] cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-600/30 hover:text-[#D1D5DB]"
+                className="flex h-8 w-8 text-[#9CA3AF] cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-600/30 hover:text-[#D1D5DB] pointer-events-auto relative z-10"
                 disabled={isRecording}
               >
                 <Camera className="h-5 w-5 transition-colors" />
@@ -715,11 +727,21 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
 
             <PromptInputAction tooltip="Upload image">
               <button
-                onClick={() => {
-                  if (!user) onShowLogin?.();
-                  else uploadInputRef.current?.click();
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (isRecording) return;
+                  console.log("PromptInputBox: Upload clicked, user:", user, "isAuthLoading:", isAuthLoading);
+                  if (!user) {
+                    console.log("PromptInputBox: Upload clicked, no user, calling onShowLogin");
+                    toaster.create({ title: "Authentication Required", description: "Please sign in to upload files" });
+                    onShowLogin?.();
+                  } else {
+                    uploadInputRef.current?.click();
+                  }
                 }}
-                className="flex h-8 w-8 text-[#9CA3AF] cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-600/30 hover:text-[#D1D5DB]"
+                className="flex h-8 w-8 text-[#9CA3AF] cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-600/30 hover:text-[#D1D5DB] pointer-events-auto relative z-10"
                 disabled={isRecording}
               >
                 <Paperclip className="h-5 w-5 transition-colors" />
@@ -738,11 +760,21 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
 
             <PromptInputAction tooltip="Drive">
               <button
-                onClick={() => {
-                  if (!user) onShowLogin?.();
-                  else onDriveClick?.();
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (isRecording) return;
+                  console.log("PromptInputBox: Drive clicked, user:", user, "isAuthLoading:", isAuthLoading);
+                  if (!user) {
+                    console.log("PromptInputBox: Drive clicked, no user, calling onShowLogin");
+                    toaster.create({ title: "Authentication Required", description: "Please sign in to access Drive" });
+                    onShowLogin?.();
+                  } else {
+                    onDriveClick?.();
+                  }
                 }}
-                className="flex h-8 w-8 text-[#9CA3AF] cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-600/30 hover:text-[#D1D5DB]"
+                className="flex h-8 w-8 text-[#9CA3AF] cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-600/30 hover:text-[#D1D5DB] pointer-events-auto relative z-10"
                 disabled={isRecording}
               >
                 <HardDrive className="h-5 w-5 transition-colors" />

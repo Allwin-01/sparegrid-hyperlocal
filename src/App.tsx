@@ -68,6 +68,7 @@ import { UserProfile } from './components/UserProfile';
 import { LimelightNav, NavItem } from './components/ui/limelight-nav';
 import { SignInCard } from './components/ui/sign-in-card-2';
 import ToastBasic, { toaster } from './components/ui/basic-toast';
+import { supabase } from './lib/supabase';
 import { Avatar, AvatarFallback, AvatarImage } from './components/ui/avatar';
 import { IntroSequence } from './components/IntroSequence';
 import { QuickStrikeResult, SearchPageView } from './components/SearchViews';
@@ -128,6 +129,7 @@ export default function App() {
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [showHardware, setShowHardware] = useState(false);
   const [hardwareTab, setHardwareTab] = useState<'camera' | 'upload' | 'drive'>('camera');
   const [showLogin, setShowLogin] = useState(false);
@@ -135,6 +137,10 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(false);
   const [isGlobeHovered, setIsGlobeHovered] = useState(false);
   const scrollContainerRef = useMemo(() => ({ current: null as HTMLDivElement | null }), []);
+
+  useEffect(() => {
+    console.log("App: Auth state check - user:", user?.email, "isAuthLoading:", isAuthLoading);
+  }, [user, isAuthLoading]);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -151,21 +157,58 @@ export default function App() {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          displayName: session.user.user_metadata.full_name || session.user.email?.split('@')[0],
+          email: session.user.email,
+          photoURL: session.user.user_metadata.avatar_url || `https://avatar.vercel.sh/${session.user.id}`
+        });
+      }
+      setIsAuthLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          displayName: session.user.user_metadata.full_name || session.user.email?.split('@')[0],
+          email: session.user.email,
+          photoURL: session.user.user_metadata.avatar_url || `https://avatar.vercel.sh/${session.user.id}`
+        });
+      } else {
+        setUser(null);
+      }
+      setIsAuthLoading(false);
+    });
+
+    // Safety timeout for auth loading
+    const timeout = setTimeout(() => {
+      setIsAuthLoading(false);
+    }, 2000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
+  }, []);
+
   const handleLoginSuccess = () => {
-    setUser({
-      displayName: 'John Doe',
-      email: 'john.doe@example.com',
-      photoURL: 'https://avatar.vercel.sh/128'
-    });
     setShowLogin(false);
-    toaster.create({
-      title: "Welcome!",
-      description: "Your account has been created successfully.",
-      type: "success",
-    });
   };
 
-  const handleSignOut = () => {
+  const handleShowLogin = () => {
+    console.log("handleShowLogin called, setting showLogin to true");
+    toaster.create({ title: "Sign In", description: "Opening sign-in..." });
+    setShowLogin(true);
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     toaster.create({
       title: "Signed Out",
@@ -504,7 +547,8 @@ export default function App() {
                 onSend={(q) => setQuickStrikeQuery(q)} 
                 placeholder={t.searchPlaceholder}
                 user={user}
-                onShowLogin={() => setShowLogin(true)}
+                isAuthLoading={isAuthLoading}
+                onShowLogin={handleShowLogin}
                 onCameraClick={() => {
                   setHardwareTab('camera');
                   setShowHardware(true);
@@ -695,10 +739,14 @@ export default function App() {
 
         <div className="p-4 mt-auto">
           {user ? (
-            <div className="flex items-center gap-4 p-4 rounded-2xl text-white/60 hover:bg-white/5 hover:text-white transition-all group">
-              <UserProfile user={user} onSignOut={handleSignOut} />
-              <span className="hidden lg:block text-[11px] uppercase tracking-[0.2em] font-black">{t.profile}</span>
-            </div>
+            <UserProfile user={user} onSignOut={handleSignOut}>
+              <button className="w-full flex items-center gap-4 p-4 rounded-2xl text-white/60 hover:bg-white/5 hover:text-white transition-all group">
+                <div className="w-6 h-6 rounded-full overflow-hidden border border-white/10 shrink-0">
+                  <img src={user.photoURL} alt="" className="w-full h-full object-cover" />
+                </div>
+                <span className="hidden lg:block text-[11px] uppercase tracking-[0.2em] font-black">{t.profile}</span>
+              </button>
+            </UserProfile>
           ) : (
             <button 
               onClick={() => setShowLogin(true)}

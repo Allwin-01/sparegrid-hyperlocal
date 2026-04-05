@@ -1,7 +1,8 @@
 
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, HardDrive, X, Check, Loader2 } from 'lucide-react';
+import { Camera, Upload, HardDrive, X, Check, Loader2, BrainCircuit, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { GoogleGenAI } from "@google/genai";
 
 interface HardwareIntegrationsProps {
   onClose: () => void;
@@ -12,6 +13,7 @@ export const HardwareIntegrations: React.FC<HardwareIntegrationsProps> = ({ onCl
   const [activeTab, setActiveTab] = useState<'camera' | 'upload' | 'drive'>(initialTab || 'camera');
   const [isProcessing, setIsProcessing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -38,20 +40,52 @@ export const HardwareIntegrations: React.FC<HardwareIntegrationsProps> = ({ onCl
         
         // Stop stream
         const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+        }
       }
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (!capturedImage) return;
+    setIsProcessing(true);
+    setAnalysisResult(null);
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const base64Data = capturedImage.split(',')[1];
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          {
+            parts: [
+              { text: "Act as an expert automotive mechanical engineer. Identify this spare part precisely. Provide its technical name, common use cases, and signs of wear or failure to look for. Be direct and professional." },
+              { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
+            ]
+          }
+        ]
+      });
+      
+      setAnalysisResult(response.text || "Analysis complete, but no text was returned.");
+    } catch (err) {
+      console.error("AI Analysis Error:", err);
+      setAnalysisResult("Failed to analyze image. Please ensure the part is clearly visible and try again.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setIsProcessing(true);
-      // Simulate processing
-      setTimeout(() => {
-        setIsProcessing(false);
-        setCapturedImage(URL.createObjectURL(file));
-      }, 1500);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setCapturedImage(event.target?.result as string);
+        setAnalysisResult(null);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -113,17 +147,48 @@ export const HardwareIntegrations: React.FC<HardwareIntegrationsProps> = ({ onCl
                 </>
               ) : (
                 <div className="w-full flex flex-col items-center gap-6">
-                  <img src={capturedImage} className="w-full max-h-[300px] object-contain rounded-2xl border border-brand-orange/30" />
+                  <img src={capturedImage} className="w-full max-h-[250px] object-contain rounded-2xl border border-brand-orange/30" />
+                  
+                  {isProcessing ? (
+                    <div className="flex flex-col items-center gap-4 py-4">
+                      <Loader2 className="animate-spin text-brand-orange" size={32} />
+                      <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold animate-pulse">AI is identifying the part...</p>
+                    </div>
+                  ) : analysisResult ? (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="w-full p-6 glass-card border-brand-orange/20 bg-brand-orange/5"
+                    >
+                      <div className="flex items-center gap-2 mb-3 text-brand-orange">
+                        <BrainCircuit size={18} />
+                        <h4 className="text-xs font-black uppercase tracking-tighter italic">Analysis Result</h4>
+                      </div>
+                      <div className="text-xs text-white/80 leading-relaxed max-h-[150px] overflow-y-auto pr-2 custom-scrollbar">
+                        {analysisResult}
+                      </div>
+                    </motion.div>
+                  ) : null}
+
                   <div className="flex gap-4">
                     <button 
-                      onClick={() => setCapturedImage(null)}
-                      className="px-6 py-3 rounded-xl border border-white/10 text-[10px] font-bold uppercase tracking-widest"
+                      onClick={() => {
+                        setCapturedImage(null);
+                        setAnalysisResult(null);
+                        if (activeTab === 'camera') startCamera();
+                      }}
+                      className="px-6 py-3 rounded-xl border border-white/10 text-[10px] font-bold uppercase tracking-widest hover:bg-white/5 transition-colors"
                     >
                       Retake
                     </button>
-                    <button className="px-6 py-3 rounded-xl bg-brand-orange text-white text-[10px] font-bold uppercase tracking-widest shadow-[0_0_20px_rgba(255,77,0,0.3)]">
-                      Analyze Part
-                    </button>
+                    {!analysisResult && !isProcessing && (
+                      <button 
+                        onClick={handleAnalyze}
+                        className="px-6 py-3 rounded-xl bg-brand-orange text-white text-[10px] font-bold uppercase tracking-widest shadow-[0_0_20px_rgba(255,77,0,0.3)] hover:scale-105 transition-transform"
+                      >
+                        Analyze Part
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

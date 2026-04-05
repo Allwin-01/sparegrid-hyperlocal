@@ -14,16 +14,18 @@ import { Button } from '@/components/ui/button';
 import { User, Settings, LogOut } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-export function UserProfile({ user, onSignOut }: { user: any, onSignOut?: () => void }) {
+export function UserProfile({ user, onSignOut, children }: { user: any, onSignOut?: () => void, children?: React.ReactNode }) {
 	return (
 		<Popover>
 			<PopoverTrigger asChild>
-				<Button variant="ghost" className="h-10 w-10 rounded-full p-0 hover:bg-white/10">
-					<Avatar className="h-8 w-8 border border-white/10">
-						<AvatarImage src={user?.photoURL || "https://avatar.vercel.sh/128"} />
-						<AvatarFallback className="bg-brand-orange text-white">{user?.displayName?.[0] || 'U'}</AvatarFallback>
-					</Avatar>
-				</Button>
+				{children || (
+					<Button variant="ghost" className="h-10 w-10 rounded-full p-0 hover:bg-white/10">
+						<Avatar className="h-8 w-8 border border-white/10">
+							<AvatarImage src={user?.photoURL || "https://avatar.vercel.sh/128"} />
+							<AvatarFallback className="bg-brand-orange text-white">{user?.displayName?.[0] || 'U'}</AvatarFallback>
+						</Avatar>
+					</Button>
+				)}
 			</PopoverTrigger>
 			<PopoverContent className='w-64 bg-brand-charcoal/90 backdrop-blur-xl border-white/10 text-white'>
 				<PopoverHeader className="border-white/10">

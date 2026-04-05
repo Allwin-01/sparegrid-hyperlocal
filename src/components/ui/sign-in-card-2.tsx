@@ -1,7 +1,9 @@
 'use client'
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
-import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, User } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { toaster } from './basic-toast';
 
 import { cn } from "@/lib/utils"
 
@@ -29,15 +31,19 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
 }
 
 export function SignInCard({ onLoginSuccess }: { onLoginSuccess?: () => void }) {
+  const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
+    console.log("SignInCard mounted");
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
     };
@@ -66,13 +72,100 @@ export function SignInCard({ onLoginSuccess }: { onLoginSuccess?: () => void }) 
     mouseY.set(0);
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    setError(null);
+    
+    try {
+      if (isSignUp) {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+            }
+          }
+        });
+        if (error) throw error;
+        
+        if (data.session) {
+          toaster.create({
+            title: "Success",
+            description: "Account created and logged in!",
+            type: "success"
+          });
+        } else {
+          toaster.create({
+            title: "Verification Required",
+            description: "Please check your email to verify your account before signing in.",
+            type: "info"
+          });
+          setIsSignUp(false); // Switch to sign in mode
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
+        if (error) {
+          if (error.message.includes("Email not confirmed")) {
+            throw new Error("Please verify your email address before signing in.");
+          }
+          throw error;
+        }
+
+        toaster.create({
+          title: "Success",
+          description: "Logged in successfully",
+          type: "success"
+        });
+      }
+      
       if (onLoginSuccess) onLoginSuccess();
-    }, 2000);
+    } catch (err: any) {
+      setError(err.message || "Authentication failed");
+      toaster.create({
+        title: "Error",
+        description: err.message || "Authentication failed",
+        type: "error"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      console.log("Initiating Google Sign In with origin:", window.location.origin);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        }
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      let msg = err.message || "Failed to sign in with Google";
+      if (msg.includes("provider is not enabled")) {
+        msg = "Google login is not enabled in your Supabase dashboard. Please enable it in Authentication > Providers.";
+      }
+      setError(msg);
+      toaster.create({
+        title: "Error",
+        description: msg,
+        type: "error"
+      });
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -269,7 +362,7 @@ export function SignInCard({ onLoginSuccess }: { onLoginSuccess?: () => void }) 
                   transition={{ delay: 0.2 }}
                   className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-b from-white to-white/80"
                 >
-                  Welcome Back
+                  {isSignUp ? "Create Account" : "Welcome Back"}
                 </motion.h1>
                 
                 <motion.p
@@ -278,13 +371,56 @@ export function SignInCard({ onLoginSuccess }: { onLoginSuccess?: () => void }) 
                   transition={{ delay: 0.3 }}
                   className="text-white/60 text-xs"
                 >
-                  Sign in to continue to StyleMe
+                  {isSignUp ? "Join SpareGrid today" : "Sign in to continue to SpareGrid"}
                 </motion.p>
               </div>
 
               {/* Login form */}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <motion.div className="space-y-3">
+                  {error && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex flex-col gap-2 text-red-500 text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{error}</span>
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-red-500/10 opacity-70">
+                        <p className="font-bold mb-1 underline">Debug Info for Google Console:</p>
+                        <p className="break-all select-all">Origin: {window.location.origin}</p>
+                        <p className="mt-1">Note: If you see a Google 403 error, please ensure the Supabase Callback URL is added to your Google Cloud Console "Authorized redirect URIs".</p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {isSignUp && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className={`relative ${focusedInput === "fullName" ? 'z-10' : ''}`}
+                    >
+                      <div className="relative flex items-center overflow-hidden rounded-lg">
+                        <User className={`absolute left-3 w-4 h-4 transition-all duration-300 ${
+                          focusedInput === "fullName" ? 'text-white' : 'text-white/40'
+                        }`} />
+                        
+                        <Input
+                          type="text"
+                          placeholder="Full Name"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          onFocus={() => setFocusedInput("fullName")}
+                          onBlur={() => setFocusedInput(null)}
+                          className="w-full bg-white/5 border-transparent focus:border-white/20 text-white placeholder:text-white/30 h-10 transition-all duration-300 pl-10 pr-3 focus:bg-white/10"
+                          required={isSignUp}
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+
                   {/* Email input */}
                   <motion.div 
                     className={`relative ${focusedInput === "email" ? 'z-10' : ''}`}
@@ -417,7 +553,7 @@ export function SignInCard({ onLoginSuccess }: { onLoginSuccess?: () => void }) 
                           exit={{ opacity: 0 }}
                           className="flex items-center justify-center gap-1 text-sm font-medium"
                         >
-                          Sign In
+                          {isSignUp ? "Sign Up" : "Sign In"}
                           <ArrowRight className="w-3 h-3 group-hover/button:translate-x-1 transition-transform duration-300" />
                         </motion.span>
                       )}
@@ -425,36 +561,51 @@ export function SignInCard({ onLoginSuccess }: { onLoginSuccess?: () => void }) 
                   </div>
                 </motion.button>
 
-                {/* Minimal Divider */}
-                <div className="relative mt-2 mb-5 flex items-center">
-                  <div className="flex-grow border-t border-white/5"></div>
-                  <motion.span 
-                    className="mx-3 text-xs text-white/40"
-                    initial={{ opacity: 0.7 }}
-                    animate={{ opacity: [0.7, 0.9, 0.7] }}
-                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                  >
-                    or
-                  </motion.span>
-                  <div className="flex-grow border-t border-white/5"></div>
-                </div>
+                {!isSignUp && (
+                  <>
+                    {/* Minimal Divider */}
+                    <div className="relative mt-2 mb-5 flex items-center">
+                      <div className="flex-grow border-t border-white/5"></div>
+                      <motion.span 
+                        className="mx-3 text-xs text-white/40"
+                        initial={{ opacity: 0.7 }}
+                        animate={{ opacity: [0.7, 0.9, 0.7] }}
+                        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                      >
+                        or
+                      </motion.span>
+                      <div className="flex-grow border-t border-white/5"></div>
+                    </div>
 
-                {/* Google Sign In */}
-                <motion.button
-                  whileHover={isMobile ? {} : { scale: 1.02 }}
-                  whileTap={isMobile ? {} : { scale: 0.98 }}
-                  type="button"
-                  className="w-full relative group/google"
-                >
-                  <div className="absolute inset-0 bg-white/5 rounded-lg blur opacity-0 group-hover/google:opacity-70 transition-opacity duration-300" />
-                  
-                  <div className="relative overflow-hidden bg-white/5 text-white font-medium h-10 rounded-lg border border-white/10 hover:border-white/20 transition-all duration-300 flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 flex items-center justify-center text-white/80 group-hover/google:text-white transition-colors duration-300">G</div>
-                    <span className="text-white/80 group-hover/google:text-white transition-colors text-xs">
-                      Sign in with Google
-                    </span>
-                  </div>
-                </motion.button>
+                    {/* Google Sign In */}
+                    <motion.button
+                      whileHover={isMobile ? {} : { scale: 1.02 }}
+                      whileTap={isMobile ? {} : { scale: 0.98 }}
+                      type="button"
+                      onClick={handleGoogleSignIn}
+                      disabled={isLoading}
+                      className="w-full relative group/google"
+                    >
+                      <div className="absolute inset-0 bg-white/5 rounded-lg blur opacity-0 group-hover/google:opacity-70 transition-opacity duration-300" />
+                      
+                      <div className="relative overflow-hidden bg-white/5 text-white font-medium h-10 rounded-lg border border-white/10 hover:border-white/20 transition-all duration-300 flex items-center justify-center gap-2">
+                        {isLoading ? (
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <div className="w-4 h-4 flex items-center justify-center text-white/80 group-hover/google:text-white transition-colors duration-300">G</div>
+                            <span className="text-white/80 group-hover/google:text-white transition-colors text-xs">
+                              Sign in with Google
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </motion.button>
+                    <p className="mt-2 text-[10px] text-center text-white/40">
+                      Note: If Google Sign-In fails with a 403 error, please try opening the app in a new tab using the button in the top right.
+                    </p>
+                  </>
+                )}
 
                 {/* Sign up link */}
                 <motion.p 
@@ -463,16 +614,17 @@ export function SignInCard({ onLoginSuccess }: { onLoginSuccess?: () => void }) 
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.5 }}
                 >
-                  Don't have an account?{' '}
-                  <Link 
-                    href="#" 
+                  {isSignUp ? "Already have an account?" : "Don't have an account?"}{' '}
+                  <button 
+                    type="button"
+                    onClick={() => setIsSignUp(!isSignUp)}
                     className="relative inline-block group/signup"
                   >
                     <span className="relative z-10 text-white group-hover/signup:text-white/70 transition-colors duration-300 font-medium">
-                      Sign up
+                      {isSignUp ? "Sign in" : "Sign up"}
                     </span>
                     <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-white group-hover/signup:w-full transition-all duration-300" />
-                  </Link>
+                  </button>
                 </motion.p>
               </form>
             </div>
